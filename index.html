@@ -1,0 +1,129 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Backaris — Backup Dashboard Mockup</title>
+  <link rel="stylesheet" href="style.css" />
+</head>
+<body>
+  <div class="background-grid"></div>
+  <div class="app-shell">
+    <aside class="sidebar panel">
+      <div class="brand">
+        <div class="logo">⬡</div>
+        <div>
+          <h1>BACKARIS</h1>
+          <span>YOUR FILES. IN TIME.</span>
+        </div>
+      </div>
+
+      <nav>
+        <button class="nav-item active">⌂ <span>Overview</span></button>
+        <button class="nav-item">▱ <span>Folders</span></button>
+        <button class="nav-item">◌ <span>Changes</span></button>
+        <button class="nav-item">◷ <span>History</span></button>
+        <button class="nav-item">▥ <span>Statistics</span></button>
+        <button class="nav-item">⚙ <span>Settings</span></button>
+      </nav>
+
+      <div class="sidebar-art">
+        <div class="sun"></div>
+        <div class="mountains"></div>
+        <blockquote>“SAME FILES.<br>NEW STORIES.”</blockquote>
+      </div>
+    </aside>
+
+    <main class="main">
+      <header class="topbar">
+        <div>
+          <h2>OVERVIEW</h2>
+          <p>Your folders, their status and recent changes.</p>
+        </div>
+        <div class="next-backup glass">
+          <span class="clock">◷</span>
+          <div>
+            <small>NEXT BACKUP</small>
+            <strong>When USB is connected</strong>
+          </div>
+        </div>
+      </header>
+
+      <section class="dashboard-grid">
+        <div class="panel folders-card">
+          <div class="card-title">▱ MONITORED FOLDERS</div>
+          <div class="table header-row">
+            <span>Folder</span><span>Last backup</span><span>Changes</span><span>Size</span><span>Status</span>
+          </div>
+          <div id="folderRows"></div>
+        </div>
+
+        <div class="panel drive-card">
+          <div class="card-title">▰ BACKUP DRIVE</div>
+          <div class="drive-visual">
+            <div class="drive-glow"></div>
+            <div class="drive"></div>
+          </div>
+          <div class="drive-status">
+            <span class="status-dot"></span>
+            <div>
+              <strong>FRED_BACKUP</strong>
+              <p>/media/fred/FRED_BACKUP · 1.8 TB free</p>
+              <small>Last backup: 2026-09-25 18:43</small>
+            </div>
+          </div>
+          <button id="backupButton" class="primary">▷ Start Backup Now</button>
+          <label class="toggle-row">Auto start on connect <input type="checkbox" checked><i></i></label>
+          <label class="toggle-row">Verify after backup <input type="checkbox" checked><i></i></label>
+          <label class="toggle-row">Keep 12 monthly snapshots <input type="checkbox" checked><i></i></label>
+        </div>
+
+        <div class="panel changes-card">
+          <div class="card-head">
+            <div class="card-title">▱ RECENT CHANGES</div>
+            <select id="changeFilter">
+              <option value="all">Last 7 days</option>
+              <option value="today">Today</option>
+              <option value="30">Last 30 days</option>
+            </select>
+          </div>
+          <div class="chips">
+            <button class="chip active" data-type="all">All</button>
+            <button class="chip" data-type="new">New (85)</button>
+            <button class="chip" data-type="modified">Modified (122)</button>
+            <button class="chip" data-type="deleted">Deleted (29)</button>
+          </div>
+          <div class="change-table">
+            <div class="change-row header-row"><span>Type</span><span>Path</span><span>Folder</span><span>Time</span><span>Size</span></div>
+            <div id="changeRows"></div>
+          </div>
+        </div>
+
+        <div class="panel stats-card">
+          <div class="card-head">
+            <div class="card-title">▥ STATISTICS</div>
+            <span class="muted">Last 30 days</span>
+          </div>
+          <div class="stat-grid">
+            <div><strong>236</strong><span>Changed files</span></div>
+            <div><strong>1.8 GB</strong><span>Source data</span></div>
+            <div><strong>412 MB</strong><span>Added to backup</span></div>
+          </div>
+          <div class="chart" id="barChart"></div>
+          <div class="distribution">
+            <div class="donut"><span>236<small>files</small></span></div>
+            <div class="legend">
+              <p><i class="new"></i> New <b>85</b></p>
+              <p><i class="modified"></i> Modified <b>122</b></p>
+              <p><i class="deleted"></i> Deleted <b>29</b></p>
+            </div>
+          </div>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <div id="toast" class="toast">Backup simulation started.</div>
+  <script src="app.js"></script>
+</body>
+</html>
