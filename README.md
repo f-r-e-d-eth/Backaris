@@ -1,38 +1,43 @@
 # Backaris
 
-A cyberpunk-style backup dashboard mockup.
+A cyberpunk-style local backup and file-activity dashboard.
 
-Backaris is intended to make backups feel less like housekeeping and more like exploring the history of your files.
+## V0.2 — Live folder scanner
 
-## Mockup features
+Backaris now scans real folders through a tiny local Flask backend. The scan is read-only: it records file paths, sizes and modification timestamps in a local SQLite database.
 
-- Monitored folders with last-backup timestamps
-- New / modified / deleted file counts
-- Recent-change browser
-- Backup USB status
-- Backup statistics and visual history
-- Toggleable backup options
-- Responsive cyberpunk interface
-- Small interactive demo; no real files are touched yet
+The first scan establishes a baseline. Later scans show files that are **new**, **modified**, or **deleted** compared with that baseline. For now the baseline is intentionally not advanced automatically after every scan; later a successful USB backup will advance it.
 
-## Run
-
-No installation is required.
-
-Clone the repository and open `index.html` in your browser.
-
-For example:
+### Setup
 
 ```bash
 git clone https://github.com/f-r-e-d-eth/Backaris.git
 cd Backaris
-xdg-open index.html
+python3 -m venv .venv
+source .venv/bin/activate
+pip install -r requirements.txt
 ```
 
-## Status
+Edit `config.json` and enter the folders you want Backaris to watch.
 
-**V0.1 — UI mockup**
+Then run:
 
-This version is deliberately visual only. The next step can connect the interface to a small Python backend that scans configured folders and stores backup state in SQLite.
+```bash
+python3 backaris.py
+```
+
+Open **http://127.0.0.1:5003**.
+
+### Current safety boundary
+
+V0.2 does **not** copy, modify, delete or back up your source files. It only reads metadata and writes its own `backaris.db` database.
+
+### Next
+
+- Choose folders from the UI
+- Record real backup timestamps
+- Detect the backup USB
+- Connect successful backups to the baseline
+- Add historical activity statistics
 
 > SAME FILES. NEW STORIES.
