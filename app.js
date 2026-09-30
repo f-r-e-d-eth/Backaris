@@ -97,4 +97,30 @@ const chart=document.getElementById('barChart');
 
 document.getElementById('backupButton').textContent='⟳ Scan Folders Now';
 document.getElementById('backupButton').addEventListener('click',()=>loadStatus(true));
+async function loadUsbStatus() {
+  try {
+    const res=await fetch('/api/usb');
+    const data=await res.json();
+    const dot=document.querySelector('.status-dot');
+    const name=document.getElementById('usbName');
+    const details=document.getElementById('usbDetails');
+    const meta=document.getElementById('usbMeta');
+    const drives=data.drives||[];
+    if(drives.length) {
+      const d=drives[0];
+      dot.style.background='#00efc3';
+      dot.style.boxShadow='0 0 12px #00efc3';
+      name.textContent=d.label;
+      details.textContent=`${d.mountpoint} · ${d.free_text||'?'} free of ${d.capacity_text||'?'}`;
+      meta.textContent=`${d.filesystem||'filesystem ?'} · UUID ${d.uuid||'not available'}${drives.length>1?' · '+drives.length+' USB drives detected':''}`;
+    } else {
+      dot.style.background='#5b7184'; dot.style.boxShadow='none';
+      name.textContent='No USB backup drive';
+      details.textContent='Waiting for a removable drive…';
+      meta.textContent=data.error ? 'Detection error: '+data.error : 'Detection only · nothing will be written';
+    }
+  } catch(err) {}
+}
 loadStatus(false);
+loadUsbStatus();
+setInterval(loadUsbStatus, 3000);
