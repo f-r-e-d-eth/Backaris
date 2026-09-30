@@ -121,6 +121,35 @@ async function loadUsbStatus() {
     }
   } catch(err) {}
 }
+const USB_SCAN_SECONDS=60;
+let usbSecondsLeft=USB_SCAN_SECONDS;
+
+function resetUsbScanner() {
+  usbSecondsLeft=USB_SCAN_SECONDS;
+  document.getElementById('usbScanFill').style.width='0%';
+}
+
+function tickUsbScanner() {
+  usbSecondsLeft--;
+  const progress=((USB_SCAN_SECONDS-usbSecondsLeft)/USB_SCAN_SECONDS)*100;
+  document.getElementById('usbScanFill').style.width=progress+'%';
+  document.getElementById('usbCountdown').textContent='SCAN IN '+usbSecondsLeft+'s';
+  if(usbSecondsLeft<=0) {
+    const pulse=document.getElementById('usbScanPulse');
+    pulse.classList.remove('fire'); void pulse.offsetWidth; pulse.classList.add('fire');
+    loadUsbStatus();
+    resetUsbScanner();
+  }
+}
+
+document.getElementById('usbScanner').addEventListener('click',()=>{
+  const pulse=document.getElementById('usbScanPulse');
+  pulse.classList.remove('fire'); void pulse.offsetWidth; pulse.classList.add('fire');
+  loadUsbStatus();
+  resetUsbScanner();
+});
+
 loadStatus(false);
 loadUsbStatus();
-setInterval(loadUsbStatus, 3000);
+resetUsbScanner();
+setInterval(tickUsbScanner, 1000);
