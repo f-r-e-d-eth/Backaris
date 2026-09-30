@@ -65,12 +65,14 @@
             <div class="drive-glow"></div>
             <div class="drive"></div>
           </div>
-          <div class="drive-status">
-            <span class="status-dot"></span>
-            <div>
-              <strong id="usbName">No USB backup drive</strong>
-              <p id="usbDetails">Waiting for a removable drive…</p>
-              <small id="usbMeta">Detection only · nothing will be written</small>
+          <div id="usbDriveList" class="usb-drive-list">
+            <div class="drive-status dim">
+              <span class="status-dot"></span>
+              <div>
+                <strong>No USB drive</strong>
+                <p>Waiting for a removable drive…</p>
+                <small>Detection only · nothing will be written</small>
+              </div>
             </div>
           </div>
           <button id="usbScanner" class="usb-scanner" title="Click to scan for USB devices now">
