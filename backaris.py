@@ -57,6 +57,19 @@ def connect():
             last_scan TEXT NOT NULL
         )
     """)
+    db.execute("""
+        CREATE TABLE IF NOT EXISTS daily_stats (
+            day TEXT NOT NULL,
+            folder_path TEXT NOT NULL,
+            file_count INTEGER NOT NULL,
+            total_size INTEGER NOT NULL,
+            new_count INTEGER NOT NULL,
+            modified_count INTEGER NOT NULL,
+            deleted_count INTEGER NOT NULL,
+            collected_at TEXT NOT NULL,
+            PRIMARY KEY(day, folder_path)
+        )
+    """)
     return db
 
 
@@ -126,6 +139,40 @@ def folder_result(item, db):
     }
 
 
+def collect_daily_stat(result, db):
+    """Keep one statistics sample per folder and calendar day."""
+    if not result.get("available"):
+        return
+    day = datetime.now().astimezone().strftime("%Y-%m-%d")
+    db.execute("""
+        INSERT INTO daily_stats(
+            day, folder_path, file_count, total_size,
+            new_count, modified_count, deleted_count, collected_at
+        ) VALUES (?, ?, ?, ?, ?, ?, ?, ?)
+        ON CONFLICT(day, folder_path) DO UPDATE SET
+            file_count=excluded.file_count,
+            total_size=excluded.total_size,
+            new_count=excluded.new_count,
+            modified_count=excluded.modified_count,
+            deleted_count=excluded.deleted_count,
+            collected_at=excluded.collected_at
+    """, (
+        day, result["path"], result["file_count"], result["total_size"],
+        result["new"], result["modified"], result["deleted"], now_text()
+    ))
+
+
+def history_for(folder_path, db, days=30):
+    rows = db.execute("""
+        SELECT day, file_count, total_size, new_count, modified_count, deleted_count
+        FROM daily_stats
+        WHERE folder_path=?
+        ORDER BY day DESC
+        LIMIT ?
+    """, (folder_path, days)).fetchall()
+    return [dict(row) for row in reversed(rows)]
+
+
 def save_baseline(result, db):
     root = result["path"]
     db.execute("DELETE FROM files WHERE folder_path=?", (root,))
@@ -156,6 +203,7 @@ def status():
     with connect() as db:
         results = [folder_result(item, db) for item in config.get("folders", [])]
         for result in results:
+            result["history"] = history_for(result["path"], db)
             result.pop("_files", None)
         return jsonify({"folders": results, "scan_time": now_text()})
 
@@ -168,9 +216,11 @@ def scan():
         for result in results:
             if result["available"] and not result["baseline"]:
                 save_baseline(result, db)
+            collect_daily_stat(result, db)
         db.commit()
         public = []
         for result in results:
+            result["history"] = history_for(result["path"], db)
             result.pop("_files", None)
             public.append(result)
         return jsonify({"folders": public, "scan_time": now_text()})
@@ -190,5 +240,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.2 -> http://127.0.0.1:5003")
+    print("Backaris V0.3 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
