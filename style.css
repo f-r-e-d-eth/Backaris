@@ -146,6 +146,16 @@ blockquote {
 .drive-status.backup .status-dot { background:var(--green); box-shadow:0 0 7px var(--green),0 0 15px rgba(0,239,195,.55); }
 .drive-status.backup strong { color:#a8fff1; text-shadow:0 0 7px rgba(0,239,195,.25); }
 .drive-status strong { color:#9ef8ff; font-size:19px; }
+.borg-status { margin:8px 4px 2px; font-size:10px; letter-spacing:1.3px; color:var(--green); }
+.borg-status.ready { text-shadow:0 0 7px rgba(0,239,195,.45); }
+.borg-status.dim { color:#62758a; opacity:.65; }
+.repo-badge {
+  margin-top:7px; padding:5px 8px; border-radius:5px; font-size:9px; letter-spacing:.8px;
+  background:transparent;
+}
+.repo-badge.ready { color:var(--green); border:1px solid rgba(0,239,195,.35); }
+.repo-badge.init { color:var(--pink); border:1px solid rgba(255,46,196,.55); cursor:pointer; }
+.repo-badge.init:hover { background:rgba(255,46,196,.1); box-shadow:0 0 10px rgba(255,46,196,.2); }
 .usb-scanner {
   width:100%; border:0; background:transparent; padding:4px 3px 8px; cursor:pointer; color:var(--cyan);
 }
