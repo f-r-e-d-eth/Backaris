@@ -103,6 +103,10 @@ async function loadUsbStatus() {
     const data=await res.json();
     const host=document.getElementById('usbDriveList');
     const drives=data.drives||[];
+    const borg=data.borg||{};
+    const borgHost=document.getElementById('borgStatus');
+    borgHost.className='borg-status '+(borg.installed?'ready':'dim');
+    borgHost.textContent=borg.installed ? 'BORG · '+borg.version+' · READY' : 'BORG · NOT INSTALLED';
     if(!drives.length) {
       host.innerHTML=`<div class="drive-status dim"><span class="status-dot"></span><div>
         <strong>No USB drive</strong><p>Waiting for a removable drive…</p>
@@ -115,14 +119,31 @@ async function loadUsbStatus() {
       const title=backup ? d.backaris_name : d.label;
       const tag=backup ? 'BACKARIS BACKUP · '+d.backaris_id : 'USB DRIVE · NOT A BACKARIS BACKUP';
       const warning=d.device_error ? ' · '+d.device_error : '';
+      const repo=d.borg_repository;
+      const repoLine=backup ? (repo?.initialized
+        ? '<button class="repo-badge ready" disabled>BORG REPOSITORY READY</button>'
+        : '<button class="repo-badge init" data-device="'+d.backaris_id+'">INITIALIZE BORG REPOSITORY</button>') : '';
       return `<div class="drive-status ${backup?'backup':'dim'}">
         <span class="status-dot"></span><div>
           <strong>${title}</strong>
           <p>${d.mountpoint} · ${d.free_text||'?'} free of ${d.capacity_text||'?'}</p>
           <small>${tag} · ${d.filesystem||'filesystem ?'}${warning}</small>
+          ${repoLine}
         </div>
       </div>`;
     }).join('');
+    host.querySelectorAll('.repo-badge.init').forEach(button=>button.addEventListener('click',async()=>{
+      if(!confirm('Initialize a new unencrypted Borg repository on this Backaris device?')) return;
+      const toast=document.getElementById('toast');
+      toast.textContent='Initializing Borg repository…'; toast.classList.add('show');
+      try {
+        const response=await fetch('/api/borg/init',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:button.dataset.device})});
+        const result=await response.json();
+        toast.textContent=result.ok ? 'Borg repository initialized.' : 'Borg init failed: '+result.error;
+        if(result.ok) loadUsbStatus();
+      } catch(err) { toast.textContent='Borg init failed: '+err; }
+      setTimeout(()=>toast.classList.remove('show'),3500);
+    }));
   } catch(err) {}
 }
 const USB_SCAN_SECONDS=60;
