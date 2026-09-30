@@ -1,5 +1,6 @@
 let folders = [];
 let changes = [];
+let backupDevices = [];
 const colors = ['#00e0ff','#8a4dff','#ff2ec4','#ffd84d','#00efc3'];
 
 function formatSize(bytes) {
@@ -95,14 +96,44 @@ const chart=document.getElementById('barChart');
   const bar=document.createElement('i'); bar.style.height=h+'%'; chart.appendChild(bar);
 });
 
-document.getElementById('backupButton').textContent='⟳ Scan Folders Now';
-document.getElementById('backupButton').addEventListener('click',()=>loadStatus(true));
+document.getElementById('backupButton').textContent='▷ Start Backup Now';
+document.getElementById('backupButton').addEventListener('click',async()=>{
+  const ready=backupDevices.filter(d=>d.is_backaris && d.borg_repository?.initialized);
+  if(!ready.length) {
+    alert('Connect a recognized Backaris device with an initialized Borg repository.');
+    return;
+  }
+  let device=ready[0];
+  if(ready.length>1) {
+    const choice=prompt('Backup device ID:\n'+ready.map(d=>d.backaris_id+' — '+d.backaris_name).join('\n'),ready[0].backaris_id);
+    device=ready.find(d=>d.backaris_id===choice);
+    if(!device) return;
+  }
+  if(!confirm('Create a real backup on '+device.backaris_name+'?')) return;
+  const button=document.getElementById('backupButton');
+  const toast=document.getElementById('toast');
+  button.disabled=true; button.textContent='◷ Backup running…';
+  toast.textContent='Borg backup running · do not remove the USB drive'; toast.classList.add('show');
+  try {
+    const response=await fetch('/api/backup',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:device.backaris_id})});
+    const result=await response.json();
+    if(!response.ok || !result.ok) throw new Error(result.error||'Backup failed');
+    toast.textContent='Backup complete · '+result.archive+' · '+result.duration_seconds+' s';
+    await loadStatus(false); await loadUsbStatus();
+  } catch(err) {
+    toast.textContent='BACKUP FAILED · '+err.message;
+  } finally {
+    button.disabled=false; button.textContent='▷ Start Backup Now';
+    setTimeout(()=>toast.classList.remove('show'),6000);
+  }
+});
 async function loadUsbStatus() {
   try {
     const res=await fetch('/api/usb');
     const data=await res.json();
     const host=document.getElementById('usbDriveList');
     const drives=data.drives||[];
+    backupDevices=drives;
     const borg=data.borg||{};
     const borgHost=document.getElementById('borgStatus');
     borgHost.className='borg-status '+(borg.installed?'ready':'dim');
