@@ -128,6 +128,28 @@ def _count_tree(path):
     return count, size
 
 
+def borg_status():
+    """Return the installed Borg version without changing anything."""
+    try:
+        proc = subprocess.run(
+            ["borg", "--version"], capture_output=True, text=True,
+            timeout=5, check=True
+        )
+        return {"installed": True, "version": proc.stdout.strip() or proc.stderr.strip()}
+    except FileNotFoundError:
+        return {"installed": False, "version": None}
+    except (OSError, subprocess.SubprocessError) as exc:
+        return {"installed": False, "version": None, "error": str(exc)}
+
+
+def borg_repository_status(mountpoint):
+    repo = Path(mountpoint) / ".Backaris" / "repository"
+    return {
+        "path": str(repo),
+        "initialized": repo.is_dir() and (repo / "config").is_file(),
+    }
+
+
 def detect_usb_drives():
     """Return mounted removable/USB filesystems on Linux. Read-only detection."""
     try:
@@ -180,6 +202,7 @@ def detect_usb_drives():
                 "backaris_name": backaris_device.get("name") if backaris_device else None,
                 "backaris_id": backaris_device.get("id") if backaris_device else None,
                 "device_error": device_error,
+                "borg_repository": borg_repository_status(mount) if backaris_device else None,
             })
         for child in node.get("children") or []:
             walk(child, is_usb)
@@ -367,7 +390,44 @@ def save_baseline(result, db):
 @app.get("/api/usb")
 def usb_status():
     drives, error = detect_usb_drives()
-    return jsonify({"drives": drives, "error": error, "time": now_text()})
+    return jsonify({"drives": drives, "error": error, "borg": borg_status(), "time": now_text()})
+
+
+@app.post("/api/borg/init")
+def borg_init():
+    """Explicitly initialize an unencrypted Borg repository on a recognized device."""
+    payload = request.get_json(silent=True) or {}
+    device_id = payload.get("device_id")
+    if not device_id:
+        return jsonify({"ok": False, "error": "Missing device_id"}), 400
+
+    borg = borg_status()
+    if not borg.get("installed"):
+        return jsonify({"ok": False, "error": "Borg is not installed"}), 400
+
+    drives, error = detect_usb_drives()
+    if error:
+        return jsonify({"ok": False, "error": error}), 500
+    drive = next((d for d in drives if d.get("is_backaris") and d.get("backaris_id") == device_id), None)
+    if not drive:
+        return jsonify({"ok": False, "error": "Recognized Backaris device is not connected"}), 404
+
+    repo = Path(drive["mountpoint"]) / ".Backaris" / "repository"
+    if repo.exists():
+        return jsonify({"ok": False, "error": "Repository path already exists", "path": str(repo)}), 409
+
+    repo.parent.mkdir(parents=True, exist_ok=True)
+    try:
+        proc = subprocess.run(
+            ["borg", "init", "--encryption=none", str(repo)],
+            capture_output=True, text=True, timeout=60
+        )
+    except (OSError, subprocess.SubprocessError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    return jsonify({"ok": True, "path": str(repo), "device_id": device_id, "time": now_text()})
 
 
 
@@ -424,5 +484,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.6 -> http://127.0.0.1:5003")
+    print("Backaris V0.7 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
