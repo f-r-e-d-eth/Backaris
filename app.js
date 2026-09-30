@@ -15,7 +15,14 @@ function renderFolders() {
     const row=document.createElement('div'); row.className='folder-row';
     const total=(f.new||0)+(f.modified||0)+(f.deleted||0);
     const detail=f.baseline ? `+${f.new} / ~${f.modified} / -${f.deleted}` : 'baseline created';
-    const heights=Array.from({length:12},(_,i)=>5+((index*13+i*9+total)%24));
+    const sizes=(f.history||[]).map(h=>h.total_size);
+    let heights;
+    if(sizes.length > 1) {
+      const min=Math.min(...sizes), max=Math.max(...sizes), range=Math.max(max-min,1);
+      heights=sizes.map(v=>6+Math.round(((v-min)/range)*22));
+    } else {
+      heights=[14];
+    }
     row.innerHTML=`
       <div class="folder-cell" style="color:${colors[index%colors.length]}">
         <span class="folder-icon"></span>
