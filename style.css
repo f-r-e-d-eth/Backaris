@@ -138,8 +138,13 @@ blockquote {
 }
 .drive:after { content:""; position:absolute; bottom:8px; left:18px; width:80px; height:5px; background:var(--pink); box-shadow:0 0 10px var(--pink); }
 .drive-glow { position:absolute; inset:45% 20% 0; filter:blur(25px); background:rgba(255,46,196,.22); }
-.drive-status { display:flex; gap:12px; margin:12px 4px; align-items:flex-start; }
-.status-dot { width:12px; height:12px; border-radius:50%; background:var(--green); box-shadow:0 0 12px var(--green); margin-top:5px; }
+.usb-drive-list { display:grid; gap:5px; }
+.drive-status { display:flex; gap:12px; margin:12px 4px; align-items:flex-start; padding:7px; border-radius:8px; }
+.drive-status.backup { background:rgba(0,239,195,.035); }
+.drive-status.dim { opacity:.48; filter:saturate(.45); }
+.status-dot { flex:0 0 12px; width:12px; height:12px; border-radius:50%; background:#526474; box-shadow:none; margin-top:5px; }
+.drive-status.backup .status-dot { background:var(--green); box-shadow:0 0 7px var(--green),0 0 15px rgba(0,239,195,.55); }
+.drive-status.backup strong { color:#a8fff1; text-shadow:0 0 7px rgba(0,239,195,.25); }
 .drive-status strong { color:#9ef8ff; font-size:19px; }
 .usb-scanner {
   width:100%; border:0; background:transparent; padding:4px 3px 8px; cursor:pointer; color:var(--cyan);
