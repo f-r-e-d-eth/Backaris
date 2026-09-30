@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import fnmatch
 import json
 import os
 import sqlite3
@@ -73,21 +74,132 @@ def connect():
     return db
 
 
+def _read_ignore_file(path):
+    """Return (ignore_whole_folder, patterns) for one .BackarisIgnore file."""
+    try:
+        text = path.read_text(encoding="utf-8-sig")
+    except (OSError, UnicodeError):
+        return False, []
+
+    meaningful = [
+        line.strip()
+        for line in text.splitlines()
+        if line.strip() and not line.lstrip().startswith("#")
+    ]
+    # A truly empty file (or one containing comments/whitespace only) hides the tree.
+    return len(meaningful) == 0, meaningful
+
+
+def _matches_ignore(relative_from_rule_dir, name, patterns):
+    rel = relative_from_rule_dir.as_posix()
+    for pattern in patterns:
+        pattern = pattern.replace("\\", "/").strip().rstrip("/")
+        if not pattern:
+            continue
+        # Patterns containing a slash match a path below the ignore file.
+        # Simple patterns match a file/folder name anywhere below it.
+        if "/" in pattern:
+            if fnmatch.fnmatch(rel, pattern) or rel == pattern or rel.startswith(pattern + "/"):
+                return True
+        elif fnmatch.fnmatch(name, pattern):
+            return True
+    return False
+
+
+def _count_tree(path):
+    """Best-effort count/size used only for the 'ignored' statistics."""
+    count = 0
+    size = 0
+    if path.is_file():
+        try:
+            return 1, path.stat().st_size
+        except OSError:
+            return 0, 0
+    for current, dirs, names in os.walk(path, followlinks=False):
+        dirs[:] = [d for d in dirs if not Path(current, d).is_symlink()]
+        for name in names:
+            p = Path(current, name)
+            try:
+                size += p.stat().st_size
+                count += 1
+            except OSError:
+                pass
+    return count, size
+
+
 def scan_tree(root):
     files = {}
     errors = []
-    for current, dirs, names in os.walk(root, followlinks=False):
-        dirs[:] = [d for d in dirs if not Path(current, d).is_symlink()]
+    ignored_files = 0
+    ignored_bytes = 0
+    # Each entry is (directory containing .BackarisIgnore, patterns).
+    active_rules = []
+
+    for current, dirs, names in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+
+        # Keep only rules inherited by this directory.
+        active_rules = [
+            (base, patterns) for base, patterns in active_rules
+            if current_path == base or base in current_path.parents
+        ]
+
+        ignore_file = current_path / ".BackarisIgnore"
+        if ignore_file.is_file():
+            ignore_whole, patterns = _read_ignore_file(ignore_file)
+            if ignore_whole:
+                # The marker itself is configuration, not backup data.
+                for child in current_path.iterdir():
+                    if child.name == ".BackarisIgnore":
+                        continue
+                    c, s = _count_tree(child)
+                    ignored_files += c
+                    ignored_bytes += s
+                dirs[:] = []
+                continue
+            active_rules.append((current_path, patterns))
+
+        kept_dirs = []
+        for dirname in dirs:
+            path = current_path / dirname
+            if path.is_symlink():
+                continue
+            ignored = any(
+                _matches_ignore(path.relative_to(base), dirname, patterns)
+                for base, patterns in active_rules
+                if path == base or base in path.parents
+            )
+            if ignored:
+                c, s = _count_tree(path)
+                ignored_files += c
+                ignored_bytes += s
+            else:
+                kept_dirs.append(dirname)
+        dirs[:] = kept_dirs
+
         for name in names:
-            path = Path(current, name)
+            if name == ".BackarisIgnore":
+                continue
+            path = current_path / name
             try:
+                ignored = any(
+                    _matches_ignore(path.relative_to(base), name, patterns)
+                    for base, patterns in active_rules
+                    if path == base or base in path.parents
+                )
+                if ignored:
+                    stat = path.stat()
+                    ignored_files += 1
+                    ignored_bytes += stat.st_size
+                    continue
+
                 stat = path.stat()
                 rel = str(path.relative_to(root))
                 files[rel] = {"size": stat.st_size, "mtime_ns": stat.st_mtime_ns}
-            except (OSError, PermissionError) as exc:
+            except (OSError, PermissionError, ValueError) as exc:
                 errors.append(f"{path}: {exc}")
-    return files, errors
 
+    return files, errors, ignored_files, ignored_bytes
 
 def folder_result(item, db):
     root = Path(item["path"]).expanduser().resolve()
@@ -99,7 +211,7 @@ def folder_result(item, db):
             "new": 0, "modified": 0, "deleted": 0, "changes": []
         }
 
-    current, errors = scan_tree(root)
+    current, errors, ignored_files, ignored_bytes = scan_tree(root)
     previous_rows = db.execute(
         "SELECT relative_path, size, mtime_ns FROM files WHERE folder_path=?",
         (str(root),)
@@ -135,6 +247,9 @@ def folder_result(item, db):
         "baseline": has_baseline,
         "changes": sorted(changes, key=lambda x: x["path"].lower())[:500],
         "errors": errors[:20],
+        "ignored_files": ignored_files,
+        "ignored_bytes": ignored_bytes,
+        "ignored_size_text": format_size(ignored_bytes),
         "_files": current,
     }
 
@@ -240,5 +355,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.3 -> http://127.0.0.1:5003")
+    print("Backaris V0.4 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
