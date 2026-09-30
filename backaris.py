@@ -152,6 +152,19 @@ def detect_usb_drives():
             except OSError:
                 free = None
                 capacity = node.get("size")
+            device_file = Path(mount) / ".BackarisDevice"
+            backaris_device = None
+            device_error = None
+            if device_file.is_file():
+                try:
+                    candidate = json.loads(device_file.read_text(encoding="utf-8-sig"))
+                    if candidate.get("format") == 1 and candidate.get("id"):
+                        backaris_device = candidate
+                    else:
+                        device_error = "Invalid .BackarisDevice"
+                except (OSError, UnicodeError, json.JSONDecodeError) as exc:
+                    device_error = f"Invalid .BackarisDevice: {exc}"
+
             drives.append({
                 "name": node.get("name"),
                 "path": node.get("path"),
@@ -163,6 +176,10 @@ def detect_usb_drives():
                 "capacity_text": format_size(capacity) if capacity is not None else None,
                 "free": free,
                 "free_text": format_size(free) if free is not None else None,
+                "is_backaris": backaris_device is not None,
+                "backaris_name": backaris_device.get("name") if backaris_device else None,
+                "backaris_id": backaris_device.get("id") if backaris_device else None,
+                "device_error": device_error,
             })
         for child in node.get("children") or []:
             walk(child, is_usb)
@@ -407,5 +424,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.5 -> http://127.0.0.1:5003")
+    print("Backaris V0.6 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
