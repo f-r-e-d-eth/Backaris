@@ -4,6 +4,7 @@ import fnmatch
 import json
 import os
 import sqlite3
+import subprocess
 from datetime import datetime
 from pathlib import Path
 
@@ -125,6 +126,50 @@ def _count_tree(path):
             except OSError:
                 pass
     return count, size
+
+
+def detect_usb_drives():
+    """Return mounted removable/USB filesystems on Linux. Read-only detection."""
+    try:
+        proc = subprocess.run(
+            ["lsblk", "-J", "-b", "-o", "NAME,PATH,TYPE,TRAN,RM,LABEL,UUID,FSTYPE,MOUNTPOINT,SIZE"],
+            capture_output=True, text=True, timeout=5, check=True
+        )
+        data = json.loads(proc.stdout)
+    except (OSError, subprocess.SubprocessError, json.JSONDecodeError) as exc:
+        return [], str(exc)
+
+    drives = []
+
+    def walk(node, inherited_usb=False):
+        is_usb = inherited_usb or node.get("tran") == "usb" or bool(node.get("rm"))
+        mount = node.get("mountpoint")
+        if is_usb and mount and node.get("type") in ("part", "disk"):
+            try:
+                usage = os.statvfs(mount)
+                free = usage.f_bavail * usage.f_frsize
+                capacity = usage.f_blocks * usage.f_frsize
+            except OSError:
+                free = None
+                capacity = node.get("size")
+            drives.append({
+                "name": node.get("name"),
+                "path": node.get("path"),
+                "label": node.get("label") or node.get("name") or "USB drive",
+                "uuid": node.get("uuid"),
+                "filesystem": node.get("fstype"),
+                "mountpoint": mount,
+                "capacity": capacity,
+                "capacity_text": format_size(capacity) if capacity is not None else None,
+                "free": free,
+                "free_text": format_size(free) if free is not None else None,
+            })
+        for child in node.get("children") or []:
+            walk(child, is_usb)
+
+    for device in data.get("blockdevices", []):
+        walk(device)
+    return drives, None
 
 
 def scan_tree(root):
@@ -302,6 +347,13 @@ def save_baseline(result, db):
     )
 
 
+@app.get("/api/usb")
+def usb_status():
+    drives, error = detect_usb_drives()
+    return jsonify({"drives": drives, "error": error, "time": now_text()})
+
+
+
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
@@ -355,5 +407,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.4 -> http://127.0.0.1:5003")
+    print("Backaris V0.5 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
