@@ -431,6 +431,102 @@ def borg_init():
 
 
 
+def _borg_excludes_for_folder(root):
+    """Translate Backaris ignore rules to Borg exclude paths for this backup."""
+    excludes = []
+    for current, dirs, names in os.walk(root, topdown=True, followlinks=False):
+        current_path = Path(current)
+        ignore_file = current_path / ".BackarisIgnore"
+        if not ignore_file.is_file():
+            continue
+        ignore_whole, patterns = _read_ignore_file(ignore_file)
+        if ignore_whole:
+            excludes.append(str(current_path))
+            dirs[:] = []
+            continue
+        for pattern in patterns:
+            pattern = pattern.replace("\\", "/").strip().rstrip("/")
+            if not pattern:
+                continue
+            if "/" in pattern:
+                excludes.append(str(current_path / pattern))
+            else:
+                excludes.append(f"sh:{current_path}/**/{pattern}")
+    return excludes
+
+
+@app.post("/api/backup")
+def create_backup():
+    """Create one manual Borg archive on a recognized initialized Backaris device."""
+    payload = request.get_json(silent=True) or {}
+    device_id = payload.get("device_id")
+    if not device_id:
+        return jsonify({"ok": False, "error": "Select a Backaris backup device"}), 400
+    if not borg_status().get("installed"):
+        return jsonify({"ok": False, "error": "Borg is not installed"}), 400
+
+    drives, error = detect_usb_drives()
+    if error:
+        return jsonify({"ok": False, "error": error}), 500
+    drive = next((d for d in drives if d.get("is_backaris") and d.get("backaris_id") == device_id), None)
+    if not drive:
+        return jsonify({"ok": False, "error": "Backaris device is not connected"}), 404
+    repo_info = drive.get("borg_repository") or {}
+    if not repo_info.get("initialized"):
+        return jsonify({"ok": False, "error": "Borg repository is not initialized"}), 400
+
+    config = load_config()
+    roots = []
+    excludes = []
+    for item in config.get("folders", []):
+        root = Path(item["path"]).expanduser().resolve()
+        if root.is_dir():
+            roots.append(str(root))
+            excludes.extend(_borg_excludes_for_folder(root))
+    if not roots:
+        return jsonify({"ok": False, "error": "No monitored folders are available"}), 400
+
+    archive = "backaris-" + datetime.now().astimezone().strftime("%Y-%m-%d_%H-%M-%S")
+    repo = repo_info["path"]
+    command = ["borg", "create", "--stats", "--json"]
+    for exclude in excludes:
+        command.extend(["--exclude", exclude])
+    command.append(f"{repo}::{archive}")
+    command.extend(roots)
+
+    started = datetime.now().astimezone()
+    try:
+        proc = subprocess.run(command, capture_output=True, text=True, timeout=86400)
+    except (OSError, subprocess.SubprocessError) as exc:
+        return jsonify({"ok": False, "error": str(exc)}), 500
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+
+    try:
+        borg_result = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        borg_result = {}
+
+    # A successful archive becomes the new global source baseline.
+    with connect() as db:
+        results = [folder_result(item, db) for item in config.get("folders", [])]
+        for result in results:
+            if result.get("available"):
+                save_baseline(result, db)
+        db.commit()
+
+    duration = (datetime.now().astimezone() - started).total_seconds()
+    return jsonify({
+        "ok": True,
+        "device_id": device_id,
+        "device_name": drive.get("backaris_name"),
+        "archive": archive,
+        "duration_seconds": round(duration, 1),
+        "borg": borg_result,
+        "time": now_text(),
+    })
+
+
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
@@ -484,5 +580,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.7 -> http://127.0.0.1:5003")
+    print("Backaris V0.8 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
