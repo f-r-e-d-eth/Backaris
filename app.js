@@ -101,24 +101,28 @@ async function loadUsbStatus() {
   try {
     const res=await fetch('/api/usb');
     const data=await res.json();
-    const dot=document.querySelector('.status-dot');
-    const name=document.getElementById('usbName');
-    const details=document.getElementById('usbDetails');
-    const meta=document.getElementById('usbMeta');
+    const host=document.getElementById('usbDriveList');
     const drives=data.drives||[];
-    if(drives.length) {
-      const d=drives[0];
-      dot.style.background='#00efc3';
-      dot.style.boxShadow='0 0 12px #00efc3';
-      name.textContent=d.label;
-      details.textContent=`${d.mountpoint} · ${d.free_text||'?'} free of ${d.capacity_text||'?'}`;
-      meta.textContent=`${d.filesystem||'filesystem ?'} · UUID ${d.uuid||'not available'}${drives.length>1?' · '+drives.length+' USB drives detected':''}`;
-    } else {
-      dot.style.background='#5b7184'; dot.style.boxShadow='none';
-      name.textContent='No USB backup drive';
-      details.textContent='Waiting for a removable drive…';
-      meta.textContent=data.error ? 'Detection error: '+data.error : 'Detection only · nothing will be written';
+    if(!drives.length) {
+      host.innerHTML=`<div class="drive-status dim"><span class="status-dot"></span><div>
+        <strong>No USB drive</strong><p>Waiting for a removable drive…</p>
+        <small>${data.error ? 'Detection error: '+data.error : 'Detection only · nothing will be written'}</small>
+      </div></div>`;
+      return;
     }
+    host.innerHTML=drives.map(d=>{
+      const backup=d.is_backaris;
+      const title=backup ? d.backaris_name : d.label;
+      const tag=backup ? 'BACKARIS BACKUP · '+d.backaris_id : 'USB DRIVE · NOT A BACKARIS BACKUP';
+      const warning=d.device_error ? ' · '+d.device_error : '';
+      return `<div class="drive-status ${backup?'backup':'dim'}">
+        <span class="status-dot"></span><div>
+          <strong>${title}</strong>
+          <p>${d.mountpoint} · ${d.free_text||'?'} free of ${d.capacity_text||'?'}</p>
+          <small>${tag} · ${d.filesystem||'filesystem ?'}${warning}</small>
+        </div>
+      </div>`;
+    }).join('');
   } catch(err) {}
 }
 const USB_SCAN_SECONDS=60;
