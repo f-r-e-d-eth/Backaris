@@ -576,7 +576,10 @@ def restore_files():
             item = json.loads(line)
         except json.JSONDecodeError:
             continue
-        if item.get("type") == "f":
+        # Borg 1.x commonly reports regular files as "-" in JSON-lines output.
+        # Some versions/formats use "f", so accept both.
+        item_type = item.get("type")
+        if item_type in ("-", "f"):
             files.append({"path": item.get("path"), "size": item.get("size", 0)})
     return jsonify({"ok": True, "files": files})
 
