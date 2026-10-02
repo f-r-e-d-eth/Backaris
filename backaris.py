@@ -581,6 +581,34 @@ def restore_files():
     return jsonify({"ok": True, "files": files})
 
 
+@app.post("/api/restore")
+def restore_one_file():
+    payload = request.get_json(silent=True) or {}
+    device_id = payload.get("device_id", "")
+    archive = payload.get("archive", "")
+    item_path = payload.get("path", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    safe_path = Path(item_path)
+    if not archive.startswith("backaris-") or not item_path or safe_path.is_absolute() or ".." in safe_path.parts:
+        return jsonify({"ok": False, "error": "Invalid restore selection"}), 400
+
+    repo = drive["borg_repository"]["path"]
+    restore_root = Path.home() / "Backaris-Restore" / archive
+    restore_root.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        ["borg", "extract", f"{repo}::{archive}", item_path],
+        cwd=str(restore_root), capture_output=True, text=True, timeout=3600
+    )
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    restored = restore_root / safe_path
+    if not restored.is_file():
+        return jsonify({"ok": False, "error": "Borg finished but restored file was not found"}), 500
+    return jsonify({"ok": True, "restored_to": str(restored), "size": restored.stat().st_size, "time": now_text()})
+
+
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
