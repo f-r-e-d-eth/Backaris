@@ -20,12 +20,12 @@
       </div>
 
       <nav>
-        <button class="nav-item active">⌂ <span>Overview</span></button>
-        <button class="nav-item">▱ <span>Folders</span></button>
-        <button class="nav-item">◌ <span>Changes</span></button>
-        <button class="nav-item">◷ <span>History</span></button>
-        <button class="nav-item">▥ <span>Statistics</span></button>
-        <button class="nav-item">⚙ <span>Settings</span></button>
+        <button class="nav-item active" data-view="overview">⌂ <span>Overview</span></button>
+        <button class="nav-item" data-view="folders">▱ <span>Folders</span></button>
+        <button class="nav-item" data-view="changes">◌ <span>Changes</span></button>
+        <button class="nav-item" data-view="history">◷ <span>History</span></button>\n        <button class="nav-item" data-view="restore">↶ <span>Restore</span></button>
+        <button class="nav-item" data-view="statistics">▥ <span>Statistics</span></button>
+        <button class="nav-item" data-view="settings">⚙ <span>Settings</span></button>
       </nav>
 
       <div class="sidebar-art">
@@ -38,19 +38,19 @@
     <main class="main">
       <header class="topbar">
         <div>
-          <h2>OVERVIEW</h2>
-          <p>Your folders, their status and recent changes.</p>
+          <h2 id="viewTitle">OVERVIEW</h2>
+          <p id="viewSubtitle">Your folders, their status and recent changes.</p>
         </div>
         <div class="next-backup glass">
           <span class="clock">◷</span>
           <div>
             <small>NEXT BACKUP</small>
-            <strong>Live folder scanner · V0.8</strong>
+            <strong>Live folder scanner · V0.9</strong>
           </div>
         </div>
       </header>
 
-      <section class="dashboard-grid">
+      <section id="overviewView" class="dashboard-grid">
         <div class="panel folders-card">
           <div class="card-title">▱ MONITORED FOLDERS</div>
           <div class="table header-row">
