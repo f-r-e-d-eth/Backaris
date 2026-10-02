@@ -527,6 +527,60 @@ def create_backup():
     })
 
 
+def _restore_drive(device_id):
+    drives, error = detect_usb_drives()
+    if error:
+        return None, error
+    drive = next((d for d in drives if d.get("is_backaris") and d.get("backaris_id") == device_id), None)
+    if not drive:
+        return None, "Backaris device is not connected"
+    if not (drive.get("borg_repository") or {}).get("initialized"):
+        return None, "Borg repository is not initialized"
+    return drive, None
+
+
+@app.get("/api/restore/archives")
+def restore_archives():
+    device_id = request.args.get("device_id", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    repo = drive["borg_repository"]["path"]
+    proc = subprocess.run(["borg", "list", "--json", repo], capture_output=True, text=True, timeout=60)
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return jsonify({"ok": False, "error": "Could not read Borg archive list"}), 500
+    archives = [{"name": a.get("name"), "time": a.get("time")} for a in data.get("archives", [])]
+    return jsonify({"ok": True, "device_name": drive.get("backaris_name"), "archives": archives})
+
+
+@app.get("/api/restore/files")
+def restore_files():
+    device_id = request.args.get("device_id", "")
+    archive = request.args.get("archive", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    if not archive.startswith("backaris-"):
+        return jsonify({"ok": False, "error": "Invalid archive"}), 400
+    repo = drive["borg_repository"]["path"]
+    proc = subprocess.run(["borg", "list", "--json-lines", f"{repo}::{archive}"], capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    files = []
+    for line in proc.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        if item.get("type") == "f":
+            files.append({"path": item.get("path"), "size": item.get("size", 0)})
+    return jsonify({"ok": True, "files": files})
+
+
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
@@ -580,5 +634,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.8 -> http://127.0.0.1:5003")
+    print("Backaris V0.9 -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
