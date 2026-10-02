@@ -209,3 +209,101 @@ loadStatus(false);
 loadUsbStatus();
 resetUsbScanner();
 setInterval(tickUsbScanner, 1000);
+
+
+let restoreFilesCache = [];
+
+function showView(name) {
+  const restore = name === 'restore';
+  document.getElementById('overviewView').classList.toggle('hidden', restore);
+  document.getElementById('restoreView').classList.toggle('hidden', !restore);
+  document.querySelectorAll('.nav-item').forEach(b=>b.classList.toggle('active', b.dataset.view===name));
+  document.getElementById('viewTitle').textContent = restore ? 'RESTORE' : 'OVERVIEW';
+  document.getElementById('viewSubtitle').textContent = restore
+    ? 'Browse a Borg snapshot and rescue a file without touching the original.'
+    : 'Your folders, their status and recent changes.';
+  if (restore) loadRestoreDevices();
+}
+
+document.querySelectorAll('.nav-item[data-view]').forEach(button=>button.addEventListener('click',()=>{
+  if (button.dataset.view==='restore' || button.dataset.view==='overview') showView(button.dataset.view);
+}));
+
+function loadRestoreDevices() {
+  const select=document.getElementById('restoreDevice');
+  const ready=backupDevices.filter(d=>d.is_backaris && d.borg_repository?.initialized);
+  select.innerHTML=ready.length
+    ? ready.map(d=>'<option value="'+d.backaris_id+'">'+d.backaris_name+'</option>').join('')
+    : '<option value="">No backup device connected</option>';
+  if (ready.length) loadRestoreArchives();
+}
+
+async function loadRestoreArchives() {
+  const device=document.getElementById('restoreDevice').value;
+  const archive=document.getElementById('restoreArchive');
+  const files=document.getElementById('restoreFiles');
+  if(!device) return;
+  archive.innerHTML='<option>Loading snapshots…</option>';
+  files.innerHTML='<div class="restore-empty">Reading Borg repository…</div>';
+  try {
+    const response=await fetch('/api/restore/archives?device_id='+encodeURIComponent(device));
+    const data=await response.json();
+    if(!response.ok || !data.ok) throw new Error(data.error||'Could not list snapshots');
+    const archives=(data.archives||[]).slice().reverse();
+    archive.innerHTML=archives.length
+      ? archives.map(a=>'<option value="'+a.name+'">'+a.name+'</option>').join('')
+      : '<option value="">No snapshots found</option>';
+    if(archives.length) loadRestoreFiles(); else files.innerHTML='<div class="restore-empty">No snapshots found.</div>';
+  } catch(err) {
+    archive.innerHTML='<option value="">Error</option>';
+    files.innerHTML='<div class="restore-empty">'+err.message+'</div>';
+  }
+}
+
+async function loadRestoreFiles() {
+  const device=document.getElementById('restoreDevice').value;
+  const archive=document.getElementById('restoreArchive').value;
+  const host=document.getElementById('restoreFiles');
+  if(!device || !archive) return;
+  host.innerHTML='<div class="restore-empty">Reading file list…</div>';
+  try {
+    const response=await fetch('/api/restore/files?device_id='+encodeURIComponent(device)+'&archive='+encodeURIComponent(archive));
+    const data=await response.json();
+    if(!response.ok || !data.ok) throw new Error(data.error||'Could not list files');
+    restoreFilesCache=data.files||[];
+    renderRestoreFiles();
+  } catch(err) {
+    host.innerHTML='<div class="restore-empty">'+err.message+'</div>';
+  }
+}
+
+function renderRestoreFiles() {
+  const host=document.getElementById('restoreFiles');
+  const query=document.getElementById('restoreSearch').value.toLowerCase();
+  const visible=restoreFilesCache.filter(f=>f.path.toLowerCase().includes(query));
+  document.getElementById('restoreCount').textContent=visible.length+' files';
+  host.innerHTML=visible.slice(0,1000).map(f=>'<button class="restore-file" data-path="'+encodeURIComponent(f.path)+'"><span>▱ '+f.path+'</span><small>'+formatSize(f.size)+'</small></button>').join('')
+    || '<div class="restore-empty">No matching files.</div>';
+  host.querySelectorAll('.restore-file').forEach(button=>button.addEventListener('click',()=>restoreFile(decodeURIComponent(button.dataset.path))));
+}
+
+async function restoreFile(path) {
+  const device=document.getElementById('restoreDevice').value;
+  const archive=document.getElementById('restoreArchive').value;
+  if(!confirm('Restore this file to ~/Backaris-Restore?\n\n'+path+'\n\nThe original file will not be touched.')) return;
+  const toast=document.getElementById('toast');
+  toast.textContent='Restoring '+path+'…'; toast.classList.add('show');
+  try {
+    const response=await fetch('/api/restore',{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({device_id:device,archive,path})});
+    const data=await response.json();
+    if(!response.ok || !data.ok) throw new Error(data.error||'Restore failed');
+    toast.textContent='RESCUED · '+data.restored_to;
+  } catch(err) {
+    toast.textContent='RESTORE FAILED · '+err.message;
+  }
+  setTimeout(()=>toast.classList.remove('show'),8000);
+}
+
+document.getElementById('restoreDevice').addEventListener('change',loadRestoreArchives);
+document.getElementById('restoreArchive').addEventListener('change',loadRestoreFiles);
+document.getElementById('restoreSearch').addEventListener('input',renderRestoreFiles);
