@@ -274,3 +274,14 @@ select { background:#06101e; color:#78cfe9; border:0; }
 .restore-file small { flex:0 0 auto; color:#6fa6c7; }
 .restore-empty { padding:30px 10px; text-align:center; color:#668ca7; }
 @media (max-width:720px) { .restore-controls { grid-template-columns:1fr; } }
+
+.secondary {
+  width:100%; margin:10px 0 0; padding:10px; border-radius:9px; cursor:pointer;
+  color:var(--cyan); font-weight:700; border:1px solid rgba(0,224,255,.45);
+  background:rgba(0,224,255,.05);
+}
+.secondary:hover { background:rgba(0,224,255,.11); }
+.primary:disabled, .secondary:disabled { opacity:.55; cursor:wait; }
+.chart { position:relative; }
+.chart i { min-width:7px; }
+.chart-empty { margin:auto; align-self:center; color:#668ca7; font-size:12px; }
