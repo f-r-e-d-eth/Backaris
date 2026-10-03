@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Backaris — Backup Dashboard Mockup</title>
+  <title>Backaris — Backup Dashboard</title>
   <link rel="icon" type="image/svg+xml" href="favicon.svg" />
   <link rel="stylesheet" href="style.css" />
 </head>
@@ -21,12 +21,7 @@
 
       <nav>
         <button class="nav-item active" data-view="overview">⌂ <span>Overview</span></button>
-        <button class="nav-item" data-view="folders">▱ <span>Folders</span></button>
-        <button class="nav-item" data-view="changes">◌ <span>Changes</span></button>
-        <button class="nav-item" data-view="history">◷ <span>History</span></button>
         <button class="nav-item" data-view="restore">↶ <span>Restore</span></button>
-        <button class="nav-item" data-view="statistics">▥ <span>Statistics</span></button>
-        <button class="nav-item" data-view="settings">⚙ <span>Settings</span></button>
       </nav>
 
       <div class="sidebar-art">
@@ -45,8 +40,8 @@
         <div class="next-backup glass">
           <span class="clock">◷</span>
           <div>
-            <small>NEXT BACKUP</small>
-            <strong>Live folder scanner · V0.9</strong>
+            <small>BACKARIS STATUS</small>
+            <strong id="appStatus">V1.0 RC · checking…</strong>
           </div>
         </div>
       </header>
@@ -81,19 +76,18 @@
             <span class="usb-scan-head"><b>DEVICE LINK</b><small id="usbCountdown">SCAN IN 60s</small></span>
             <span class="usb-scan-track"><i id="usbScanFill"></i><em id="usbScanPulse"></em></span>
           </button>
+          <button id="scanButton" class="secondary">⟳ Scan Folders</button>
           <button id="backupButton" class="primary">▷ Start Backup Now</button>
-          <label class="toggle-row">Auto start on connect <input type="checkbox" checked><i></i></label>
-          <label class="toggle-row">Verify after backup <input type="checkbox" checked><i></i></label>
-          <label class="toggle-row">Keep 12 monthly snapshots <input type="checkbox" checked><i></i></label>
         </div>
 
         <div class="panel changes-card">
           <div class="card-head">
             <div class="card-title">▱ RECENT CHANGES</div>
             <select id="changeFilter">
-              <option value="all">Last 7 days</option>
-              <option value="today">Today</option>
+              <option value="7">Last 7 days</option>
+              <option value="1">Today</option>
               <option value="30">Last 30 days</option>
+              <option value="current">Since last backup</option>
             </select>
           </div>
           <div class="chips">
@@ -103,7 +97,7 @@
             <button class="chip" data-type="deleted">Deleted (29)</button>
           </div>
           <div class="change-table">
-            <div class="change-row header-row"><span>Type</span><span>Path</span><span>Folder</span><span>Time</span><span>Size</span></div>
+            <div class="change-row header-row"><span>Type</span><span>Path / Summary</span><span>Folder</span><span>Day</span><span>Count / Size</span></div>
             <div id="changeRows"></div>
           </div>
         </div>
@@ -114,17 +108,17 @@
             <span class="muted">Last 30 days</span>
           </div>
           <div class="stat-grid">
-            <div><strong>236</strong><span>Changed files</span></div>
-            <div><strong>1.8 GB</strong><span>Source data</span></div>
-            <div><strong>412 MB</strong><span>Added to backup</span></div>
+            <div><strong id="statChanges">0</strong><span>Tracked changes · 30d</span></div>
+            <div><strong id="statStorage">0 B</strong><span>Total monitored size</span></div>
+            <div><strong id="statFiles">0</strong><span>Files monitored</span></div>
           </div>
           <div class="chart" id="barChart"></div>
           <div class="distribution">
-            <div class="donut"><span>236<small>files</small></span></div>
+            <div class="donut"><span>0<small>changes</small></span></div>
             <div class="legend">
-              <p><i class="new"></i> New <b>85</b></p>
-              <p><i class="modified"></i> Modified <b>122</b></p>
-              <p><i class="deleted"></i> Deleted <b>29</b></p>
+              <p><i class="new"></i> New <b id="legendNew">0</b></p>
+              <p><i class="modified"></i> Modified <b id="legendModified">0</b></p>
+              <p><i class="deleted"></i> Deleted <b id="legendDeleted">0</b></p>
             </div>
           </div>
         </div>
