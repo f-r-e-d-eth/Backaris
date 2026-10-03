@@ -387,6 +387,61 @@ def save_baseline(result, db):
     )
 
 
+@app.get("/api/statistics")
+def statistics():
+    """Aggregate the daily samples already collected by Backaris."""
+    try:
+        days = max(1, min(int(request.args.get("days", "30")), 365))
+    except ValueError:
+        days = 30
+    with connect() as db:
+        rows = db.execute("""
+            SELECT day,
+                   SUM(file_count) AS file_count,
+                   SUM(total_size) AS total_size,
+                   SUM(new_count) AS new_count,
+                   SUM(modified_count) AS modified_count,
+                   SUM(deleted_count) AS deleted_count
+            FROM daily_stats
+            GROUP BY day
+            ORDER BY day DESC
+            LIMIT ?
+        """, (days,)).fetchall()
+    history = [dict(row) for row in reversed(rows)]
+    totals = {
+        "new": sum(row["new_count"] for row in history),
+        "modified": sum(row["modified_count"] for row in history),
+        "deleted": sum(row["deleted_count"] for row in history),
+    }
+    latest = history[-1] if history else {
+        "file_count": 0, "total_size": 0
+    }
+    return jsonify({
+        "days": days,
+        "history": history,
+        "latest_file_count": latest["file_count"],
+        "latest_total_size": latest["total_size"],
+        "changes": totals,
+    })
+
+
+@app.get("/api/change-history")
+def change_history():
+    """Return per-folder daily change-count samples for the overview."""
+    try:
+        days = max(1, min(int(request.args.get("days", "7")), 365))
+    except ValueError:
+        days = 7
+    with connect() as db:
+        rows = db.execute("""
+            SELECT day, folder_path, new_count, modified_count, deleted_count
+            FROM daily_stats
+            ORDER BY day DESC, folder_path
+            LIMIT ?
+        """, (days * max(len(load_config().get("folders", [])), 1),)).fetchall()
+    return jsonify({"days": days, "rows": [dict(row) for row in rows]})
+
+
 @app.get("/api/usb")
 def usb_status():
     drives, error = detect_usb_drives()
@@ -439,6 +494,7 @@ def _borg_excludes_for_folder(root):
         ignore_file = current_path / ".BackarisIgnore"
         if not ignore_file.is_file():
             continue
+        excludes.append(str(ignore_file))
         ignore_whole, patterns = _read_ignore_file(ignore_file)
         if ignore_whole:
             excludes.append(str(current_path))
@@ -665,5 +721,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.9 -> http://127.0.0.1:5003")
+    print("Backaris V1.0 RC -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
