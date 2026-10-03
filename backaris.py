@@ -387,6 +387,61 @@ def save_baseline(result, db):
     )
 
 
+@app.get("/api/statistics")
+def statistics():
+    """Aggregate the daily samples already collected by Backaris."""
+    try:
+        days = max(1, min(int(request.args.get("days", "30")), 365))
+    except ValueError:
+        days = 30
+    with connect() as db:
+        rows = db.execute("""
+            SELECT day,
+                   SUM(file_count) AS file_count,
+                   SUM(total_size) AS total_size,
+                   SUM(new_count) AS new_count,
+                   SUM(modified_count) AS modified_count,
+                   SUM(deleted_count) AS deleted_count
+            FROM daily_stats
+            GROUP BY day
+            ORDER BY day DESC
+            LIMIT ?
+        """, (days,)).fetchall()
+    history = [dict(row) for row in reversed(rows)]
+    totals = {
+        "new": sum(row["new_count"] for row in history),
+        "modified": sum(row["modified_count"] for row in history),
+        "deleted": sum(row["deleted_count"] for row in history),
+    }
+    latest = history[-1] if history else {
+        "file_count": 0, "total_size": 0
+    }
+    return jsonify({
+        "days": days,
+        "history": history,
+        "latest_file_count": latest["file_count"],
+        "latest_total_size": latest["total_size"],
+        "changes": totals,
+    })
+
+
+@app.get("/api/change-history")
+def change_history():
+    """Return per-folder daily change-count samples for the overview."""
+    try:
+        days = max(1, min(int(request.args.get("days", "7")), 365))
+    except ValueError:
+        days = 7
+    with connect() as db:
+        rows = db.execute("""
+            SELECT day, folder_path, new_count, modified_count, deleted_count
+            FROM daily_stats
+            ORDER BY day DESC, folder_path
+            LIMIT ?
+        """, (days * max(len(load_config().get("folders", [])), 1),)).fetchall()
+    return jsonify({"days": days, "rows": [dict(row) for row in rows]})
+
+
 @app.get("/api/usb")
 def usb_status():
     drives, error = detect_usb_drives()
@@ -439,6 +494,7 @@ def _borg_excludes_for_folder(root):
         ignore_file = current_path / ".BackarisIgnore"
         if not ignore_file.is_file():
             continue
+        excludes.append(str(ignore_file))
         ignore_whole, patterns = _read_ignore_file(ignore_file)
         if ignore_whole:
             excludes.append(str(current_path))
@@ -527,6 +583,91 @@ def create_backup():
     })
 
 
+def _restore_drive(device_id):
+    drives, error = detect_usb_drives()
+    if error:
+        return None, error
+    drive = next((d for d in drives if d.get("is_backaris") and d.get("backaris_id") == device_id), None)
+    if not drive:
+        return None, "Backaris device is not connected"
+    if not (drive.get("borg_repository") or {}).get("initialized"):
+        return None, "Borg repository is not initialized"
+    return drive, None
+
+
+@app.get("/api/restore/archives")
+def restore_archives():
+    device_id = request.args.get("device_id", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    repo = drive["borg_repository"]["path"]
+    proc = subprocess.run(["borg", "list", "--json", repo], capture_output=True, text=True, timeout=60)
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    try:
+        data = json.loads(proc.stdout)
+    except json.JSONDecodeError:
+        return jsonify({"ok": False, "error": "Could not read Borg archive list"}), 500
+    archives = [{"name": a.get("name"), "time": a.get("time")} for a in data.get("archives", [])]
+    return jsonify({"ok": True, "device_name": drive.get("backaris_name"), "archives": archives})
+
+
+@app.get("/api/restore/files")
+def restore_files():
+    device_id = request.args.get("device_id", "")
+    archive = request.args.get("archive", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    if not archive.startswith("backaris-"):
+        return jsonify({"ok": False, "error": "Invalid archive"}), 400
+    repo = drive["borg_repository"]["path"]
+    proc = subprocess.run(["borg", "list", "--json-lines", f"{repo}::{archive}"], capture_output=True, text=True, timeout=300)
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    files = []
+    for line in proc.stdout.splitlines():
+        try:
+            item = json.loads(line)
+        except json.JSONDecodeError:
+            continue
+        # Borg 1.x commonly reports regular files as "-" in JSON-lines output.
+        # Some versions/formats use "f", so accept both.
+        item_type = item.get("type")
+        if item_type in ("-", "f"):
+            files.append({"path": item.get("path"), "size": item.get("size", 0)})
+    return jsonify({"ok": True, "files": files})
+
+
+@app.post("/api/restore")
+def restore_one_file():
+    payload = request.get_json(silent=True) or {}
+    device_id = payload.get("device_id", "")
+    archive = payload.get("archive", "")
+    item_path = payload.get("path", "")
+    drive, error = _restore_drive(device_id)
+    if error:
+        return jsonify({"ok": False, "error": error}), 400
+    safe_path = Path(item_path)
+    if not archive.startswith("backaris-") or not item_path or safe_path.is_absolute() or ".." in safe_path.parts:
+        return jsonify({"ok": False, "error": "Invalid restore selection"}), 400
+
+    repo = drive["borg_repository"]["path"]
+    restore_root = Path.home() / "Backaris-Restore" / archive
+    restore_root.mkdir(parents=True, exist_ok=True)
+    proc = subprocess.run(
+        ["borg", "extract", f"{repo}::{archive}", item_path],
+        cwd=str(restore_root), capture_output=True, text=True, timeout=3600
+    )
+    if proc.returncode != 0:
+        return jsonify({"ok": False, "error": (proc.stderr or proc.stdout).strip()}), 500
+    restored = restore_root / safe_path
+    if not restored.is_file():
+        return jsonify({"ok": False, "error": "Borg finished but restored file was not found"}), 500
+    return jsonify({"ok": True, "restored_to": str(restored), "size": restored.stat().st_size, "time": now_text()})
+
+
 @app.get("/")
 def index():
     return send_from_directory(BASE_DIR, "index.html")
@@ -580,5 +721,5 @@ def baseline():
 
 if __name__ == "__main__":
     load_config()
-    print("Backaris V0.8 -> http://127.0.0.1:5003")
+    print("Backaris V1.0 RC -> http://127.0.0.1:5003")
     app.run(host="127.0.0.1", port=5003, debug=False)
